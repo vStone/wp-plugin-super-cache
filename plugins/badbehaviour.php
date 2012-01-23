@@ -39,6 +39,7 @@ function wp_supercache_badbehaviour_admin() {
 		$cache_badbehaviour = 0;
 
 	$err = false;
+	$changed = false;
 
 	if ( isset( $_POST['cache_badbehaviour'] ) && $valid_nonce ) {
 		$bbfile = get_bb_file_loc();
@@ -46,11 +47,10 @@ function wp_supercache_badbehaviour_admin() {
 			$_POST[ 'cache_badbehaviour' ] = 0;
 			$err = __( 'Bad Behaviour not found. Please check your install.', 'wp-super-cache' );
 		}
-		if ( $cache_badbehaviour == (int)$_POST['cache_badbehaviour'] ) {
-			$changed = false;
-		} else {
-			$changed = true;
-		}
+		// This test is pretty much useless if you are going to set changed to true anyhow
+		//if ( $cache_badbehaviour != (int)$_POST['cache_badbehaviour'] ) {
+		//	$changed = true;
+		//}
 		$cache_badbehaviour = (int)$_POST['cache_badbehaviour'];
 		wp_cache_replace_line('^ *\$cache_compression', "\$cache_compression = 0;", $wp_cache_config_file);
 		wp_cache_replace_line('^ *\$cache_badbehaviour', "\$cache_badbehaviour = $cache_badbehaviour;", $wp_cache_config_file);
