@@ -2319,7 +2319,7 @@ function wpsc_dirsize($directory, $sizes) {
 			$filem = filemtime( $directory );
 			if ( $wp_cache_preload_on == false && $cache_max_time > 0 && $filem + $cache_max_time <= $now ) {
 				$sizes[ 'expired' ]+=1;
-				if ( $valid_nonce && $_GET[ 'listfiles' ] )
+				if ( $valid_nonce && array_key_exists('listfiles', $_GET) && $_GET[ 'listfiles' ] )
 					$sizes[ 'expired_list' ][ $now - $filem ][ str_replace( $cache_path . 'supercache/' , '', str_replace( 'index.html', '', str_replace( 'index.html.gz', '', $directory ) ) ) ] = 1;
 			} else {
 				$sizes[ 'cached' ]+=1;
