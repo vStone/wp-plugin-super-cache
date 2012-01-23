@@ -623,6 +623,7 @@ jQuery(document).ready(function(){
 	}
 	$home_path = parse_url( site_url() );
 	$home_path = trailingslashit( array_key_exists('path', $home_path) ? $home_path[ 'path' ] : '' );
+	if (! isset($wp_cache_home_path)) { $wp_cache_home_path = '/'; } // copied behaviour from phase1
 	if ( "$home_path" != "$wp_cache_home_path" )
 		wp_cache_replace_line('^ *\$wp_cache_home_path', "\$wp_cache_home_path = '$home_path';", $wp_cache_config_file);
 	
