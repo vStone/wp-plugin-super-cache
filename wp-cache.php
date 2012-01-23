@@ -1202,7 +1202,7 @@ function wsc_mod_rewrite() {
 	} elseif( strpos( $scrules, 'supercache' ) || strpos( $wprules, 'supercache' ) ) { // only write the rules once
 		$dohtaccess = false;
 	}
-	if( $dohtaccess && !$_POST[ 'updatehtaccess' ] ) {
+	if( $dohtaccess && (! array_key_exists('updatehtaccess', $_POST) || !$_POST[ 'updatehtaccess' ] )) {
 		if ( $scrules == '' ) {
 			wpsc_update_htaccess_form( 0 ); // don't hide the update htaccess form
 		} else {
