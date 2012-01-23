@@ -1017,7 +1017,7 @@ jQuery(document).ready(function(){
 				}
 				echo '<form name="cache_tester" action="" method="post">';
 				echo '<input type="hidden" name="action" value="test" />';
-				if ( 'on' == strtolower( $_SERVER['HTTPS' ] ) )
+				if ( array_key_exists('HTTPS', $_SERVER) && 'on' == strtolower( $_SERVER['HTTPS' ] ) )
 					echo "<input type='checkbox' name='httponly' checked='checked' value='1' /> " . __( 'Send non-secure (non https) request for homepage', 'wp-super-cache' );
 				echo '<div class="submit"><input type="submit" name="test" value="' . __( 'Test Cache', 'wp-super-cache' ) . '" /></div>';
 				wp_nonce_field('wp-cache');
