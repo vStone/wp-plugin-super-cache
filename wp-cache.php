@@ -1467,7 +1467,7 @@ function wp_cache_edit_max_time () {
 		$cache_gc_email_me = 0;
 		wp_cache_replace_line('^ *\$cache_gc_email_me', "\$cache_gc_email_me = $cache_gc_email_me;", $wp_cache_config_file); 
 	}
-	if ( $_POST[ 'cache_schedule_type' ] == 'interval' && isset( $_POST['cache_time_interval'] ) && $valid_nonce ) {
+	if ( array_key_exists('cache_schedule_type', $_POST)  &&  $_POST[ 'cache_schedule_type' ] == 'interval' && isset( $_POST['cache_time_interval'] ) && $valid_nonce ) {
 		wp_clear_scheduled_hook( 'wp_cache_gc' );
 		$cache_schedule_type = 'interval';
 		if ( (int)$_POST[ 'cache_time_interval' ] == 0 )
