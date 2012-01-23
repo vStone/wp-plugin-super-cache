@@ -4,11 +4,10 @@ function wp_super_cache_wptouch_admin() {
 	global $cache_wptouch, $wp_cache_config_file, $valid_nonce;
 	
 	$cache_wptouch = $cache_wptouch == '' ? '0' : $cache_wptouch;
+	$changed = false;
 
 	if(isset($_POST['cache_wptouch']) && $valid_nonce) {
-		if ( $cache_wptouch == (int)$_POST['cache_wptouch'] ) {
-			$changed = false;
-		} else {
+		if ( $cache_wptouch != (int)$_POST['cache_wptouch'] ) {
 			$changed = true;
 		}
 		$cache_wptouch = (int)$_POST['cache_wptouch'];
