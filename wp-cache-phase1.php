@@ -533,7 +533,7 @@ function get_all_supercache_filenames( $dir = '' ) {
 
 function supercache_filename() {
 	//Add support for https and http caching
-	$is_https = ('on' ==  strtolower($_SERVER['HTTPS'])  || 'https' == strtolower($_SERVER['HTTP_X_FORWARDED_PROTO'])); //Also supports https requests coming from an nginx reverse proxy
+	$is_https = ((array_key_exists('HTTPS', $_SERVER) && 'on' ==  strtolower($_SERVER['HTTPS']))  || (array_key_exists('HTTP_X_FORWARDED_PROTO', $_SERVER) && 'https' == strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']))); //Also supports https requests coming from an nginx reverse proxy
 	$extra_str = $is_https ? '-https' : '';
 
 	if ( function_exists( "apply_filters" ) ) {
