@@ -57,11 +57,9 @@ function wp_supercache_domain_mapping_admin() {
 	global $cache_domain_mapping, $wp_cache_config_file, $valid_nonce;
 	
 	$cache_domain_mapping = $cache_domain_mapping == '' ? '0' : $cache_domain_mapping;
-
+	$changed = false;
 	if(isset($_POST['cache_domain_mapping']) && $valid_nonce) {
-		if ( $cache_domain_mapping == (int)$_POST['cache_domain_mapping'] ) {
-			$changed = false;
-		} else {
+		if ( $cache_domain_mapping != (int)$_POST['cache_domain_mapping'] ) {
 			$changed = true;
 		}
 		$cache_domain_mapping = (int)$_POST['cache_domain_mapping'];
