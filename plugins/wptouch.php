@@ -94,7 +94,7 @@ function wp_super_cache_wptouch_browsers( $browsers ) {
 function wp_super_cache_wptouch_prefixes( $prefixes ) {
 	return array(); // wptouch doesn't support UA prefixes
 } 
-if ( $cache_wptouch == 1 ) {
+if (isset($cache_wptouch) &&  $cache_wptouch == 1 ) {
 	add_cacheaction( 'wp_super_cache_mobile_browsers', 'wp_super_cache_wptouch_browsers' );
 	add_cacheaction( 'wp_super_cache_mobile_prefixes', 'wp_super_cache_wptouch_prefixes' );
 }
