@@ -633,7 +633,8 @@ jQuery(document).ready(function(){
 	}
 
 	?> <table><td valign='top'><?php
-	switch( $_GET[ 'tab' ] ) {
+	$switch = array_key_exists('tab', $_GET) ? $_GET['tab'] : 'easy';
+	switch( $switch ) {
 		case "cdn":
 		scossdl_off_options();
 		break;
