@@ -18,14 +18,13 @@ function wp_supercache_awaitingmoderation_admin() {
 	global $cache_awaitingmoderation, $wp_cache_config_file, $valid_nonce;
 	
 	$cache_awaitingmoderation = $cache_awaitingmoderation == '' ? '0' : $cache_awaitingmoderation;
+	$changed = false;
 
 	if(isset($_POST['cache_awaitingmoderation']) && $valid_nonce) {
 		$cache_awaitingmoderation = (int)$_POST['cache_awaitingmoderation'];
 		wp_cache_replace_line('^ *\$cache_awaitingmoderation', "\$cache_awaitingmoderation = '$cache_awaitingmoderation';", $wp_cache_config_file);
 		$changed = true;
-	} else {
-		$changed = false;
-	}
+	} 
 	$id = 'awaitingmoderation-section';
 	?>
 		<fieldset id="<?php echo $id; ?>" class="options"> 
