@@ -1946,7 +1946,11 @@ function wp_cache_create_advanced_cache() {
 	$ret = true;
 
 	$file = file_get_contents( $wp_cache_file );
-	$file = str_replace( 'CACHEHOME', constant( 'WPCACHEHOME' ), $file );
+	$pluginpath = plugin_dir_path( $wp_cache_file );
+	//cut WP_CONTENT_DIR from path
+	$pluginpath = str_replace(WP_CONTENT_DIR, '', $pluginpath);
+
+	$file = str_replace( 'CACHEHOME', $pluginpath, $file );
 	$fp = @fopen( $wp_cache_link, 'w' );
 	if( $fp ) {
 		fputs( $fp, $file );
