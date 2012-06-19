@@ -263,7 +263,7 @@ function wp_cache_serve_cache_file() {
 			die();
 		}
 	} else {
-		if ( $meta[ 'dynamic' ] ) {
+		if ( isset( $meta[ 'dynamic' ] ) && $meta['dynamic'] ) {
 			if ( isset( $wp_super_cache_debug ) && $wp_super_cache_debug ) wp_cache_debug( "Serving wp-cache dynamic file", 5 );
 			if ( $ungzip ) {
 				$cache = file_get_contents( $cache_file );
