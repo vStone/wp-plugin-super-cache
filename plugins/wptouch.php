@@ -63,7 +63,8 @@ function wp_super_cache_maybe_disable_wptouch( $t ) {
 	if ( $cache_wptouch != 1 )
 		return false;
 
-	if ( isset( $_COOKIE[ 'wptouch_switch_toggle' ] ) && $_COOKIE['wptouch_switch_toggle'] == 'normal' )
+	if ( ( isset( $_COOKIE[ 'wptouch_switch_toggle' ] ) && $_COOKIE[ 'wptouch_switch_toggle' ] == 'normal' ) ||
+		( isset( $_COOKIE[ 'wptouch-pro-view' ] ) && $_COOKIE[ 'wptouch-pro-view' ] == 'desktop' ) )
 		return true;
 
 	$ua = explode( ",", $wptouch_exclude_ua );
@@ -102,6 +103,13 @@ function wp_super_cache_wptouch_cookie_check( $cache_key ) {
 		return $cache_key;
 	if ( $_COOKIE[ 'wptouch_switch_toggle' ] == 'normal' || $_COOKIE[ 'wptouch_switch_toggle' ] == 'mobile' )
 		return $_COOKIE[ 'wptouch_switch_toggle' ];
+
+	if ( isset( $_COOKIE[ 'wptouch-pro-view' ] ) ) {
+		if ( $_COOKIE[ 'wptouch-pro-view' ] == 'desktop' )
+			return 'normal';
+		else
+			return $_COOKIE[ 'wptouch-pro-view' ];
+	}
 
 	return $cache_key;
 }

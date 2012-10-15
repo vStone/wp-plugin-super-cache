@@ -40,6 +40,7 @@ function wp_cache_phase2() {
 		add_action('wp_cache_gc','wp_cache_gc_cron');
 		add_action( 'clean_post_cache', 'wp_cache_post_edit' );
 		add_filter( 'supercache_filename_str', 'wp_cache_check_mobile' );
+		add_action( 'wp_cache_gc_watcher', 'wp_cache_gc_watcher' );
 
 		do_cacheaction( 'add_cacheaction' );
 	}
@@ -1010,16 +1011,23 @@ function wp_cache_post_edit($post_id) {
 	global $wp_cache_clear_on_post_edit, $cache_path, $blog_cache_dir;
 	static $last_post_edited = -1;
 
-	if ( $post_id == $last_post_edited ) return $post_id;
-	$last_post_edited = $post_id;
+	if ( $post_id == $last_post_edited ) {
+		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "wp_cache_post_edit: Already processed post $post_id.", 4 );
+		return $post_id;
+	}
 
 	$post = get_post( $post_id );
-	if ( $post->post_status != 'publish' ) {
+	// Some users are inexplicibly seeing this error on scheduled posts. 
+	// define this constant to disable the post status check.
+	if ( false == defined( 'WPSCFORCEUPDATE' ) && $post->post_status != 'publish' ) {
 		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "wp_cache_post_edit: draft post, not deleting any cache files.", 4 );
 		return $post_id;
 	}
+
+	// we want to process the post again just in case it becomes published before the second time this function is called.
+	$last_post_edited = $post_id;
 	if( $wp_cache_clear_on_post_edit ) {
-		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "Clearing cache $blog_cache_dir and {$cache_path}supercache/ on post edit per config.", 2 );
+		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "wp_cache_post_edit: Clearing cache $blog_cache_dir and {$cache_path}supercache/ on post edit per config.", 2 );
 		if ( $wp_cache_object_cache ) {
 			reset_oc_version();
 		} else {
@@ -1027,7 +1035,7 @@ function wp_cache_post_edit($post_id) {
 			prune_super_cache( get_supercache_dir(), true );
 		}
 	} else {
-		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "Clearing cache for post $post_id on post edit.", 2 );
+		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "wp_cache_post_edit: Clearing cache for post $post_id on post edit.", 2 );
 		wp_cache_post_change( $post_id );
 	}
 }
@@ -1066,13 +1074,18 @@ function wp_cache_post_change( $post_id ) {
 	global $file_prefix, $cache_path, $blog_id, $super_cache_enabled, $blog_cache_dir, $blogcacheid, $wp_cache_refresh_single_only;
 	static $last_processed = -1;
 
-	if ($post_id == $last_processed) return $post_id;
-	$last_processed = $post_id;
+	if ( $post_id == $last_processed ) {
+		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "wp_cache_post_change: Already processed post $post_id.", 4 );
+		return $post_id;
+	}
 	$post = get_post( $post_id );
-	if( $post->post_status != 'publish' ) {
+	// Some users are inexplicibly seeing this error on scheduled posts. 
+	// define this constant to disable the post status check.
+	if ( false == defined( 'WPSCFORCEUPDATE' ) && $post->post_status != 'publish' ) {
 		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "wp_cache_post_change: draft post, not deleting any cache files.", 4 );
 		return $post_id;
 	}
+	$last_processed = $post_id;
 
 	if( !wp_cache_writers_entry() )
 		return $post_id;
@@ -1181,6 +1194,27 @@ function wp_cache_post_id() {
 	return 0;
 }
 
+function maybe_stop_gc( $flag ) {
+
+	if ( @file_exists( $flag ) ) {
+		if ( time() - filemtime( $flag ) > 3600 ) {
+			@unlink( $flag );
+			if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "maybe_stop_gc: GC flag found but deleted because it's older than 3600 seconds.", 5 );
+			return false;
+		} else {
+			if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( 'maybe_stop_gc: GC flag found. GC cancelled.', 5 );
+			return true;
+		}
+	} else {
+		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( 'maybe_stop_gc: GC flag not found. GC will go ahead..', 5 );
+		return false;
+	}
+}
+function get_gc_flag() {
+	global $cache_path;
+	return $cache_path . strtolower( preg_replace( '!/:.*$!', '', str_replace( 'http://', '', str_replace( 'https://', '', get_option( 'home' ) ) ) ) ) . "_wp_cache_gc.txt";
+}
+
 function wp_cache_gc_cron() {
 	global $file_prefix, $cache_max_time, $cache_gc_email_me, $cache_time_interval;
 
@@ -1189,7 +1223,17 @@ function wp_cache_gc_cron() {
 		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( 'Cache garbage collection disabled because cache expiry time is zero.', 5 );
 		return false;
 	}
+
+	$gc_flag = get_gc_flag();
+	if ( maybe_stop_gc( $gc_flag ) ) {
+		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( 'GC flag found. GC cancelled.', 5 );
+		return false;
+	}
+
 	update_option( 'wpsupercache_gc_time', time() ); 
+	if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "wp_cache_gc_cron: Set GC Flag. ($gc_flag)", 5 );
+	$fp = @fopen( $gc_flag, 'w' );
+	@fclose( $fp );
 
 	if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( 'Cache garbage collection.', 5 );
 
@@ -1216,21 +1260,26 @@ function wp_cache_gc_cron() {
 
 		wp_mail( get_option( 'admin_email' ), sprintf( __( '[%1$s] WP Super Cache GC Report', 'wp-super-cache' ), site_url() ), $msg );
 	}
+	@unlink( $gc_flag );
+	if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( 'GC completed. GC flag deleted.', 5 );
 	schedule_wp_gc( 1 );
 }
 
 function schedule_wp_gc( $forced = 0 ) {
 	global $cache_schedule_type, $cache_max_time, $cache_time_interval, $cache_scheduled_time, $cache_schedule_interval;
 
+	if ( false == isset( $cache_time_interval ) )
+		$cache_time_interval = 3600;
+
 	if ( false == isset( $cache_schedule_type ) ) {
 		$cache_schedule_type = 'interval';
 		$cache_schedule_interval = $cache_max_time;
 	}
 	if ( $cache_schedule_type == 'interval' ) {
-		if ( $cache_max_time == 0 )
-			return false;
 		if ( !isset( $cache_max_time ) )
 			$cache_max_time = 600;
+		if ( $cache_max_time == 0 )
+			return false;
 		$last_gc = get_option( "wpsupercache_gc_time" );
 
 		if ( !$last_gc ) {
@@ -1254,6 +1303,13 @@ function schedule_wp_gc( $forced = 0 ) {
 		wp_schedule_event( strtotime( $cache_scheduled_time ), $cache_schedule_interval, 'wp_cache_gc' );
 	}
 	return true;
+}
+
+function wp_cache_gc_watcher() {
+	if ( false == wp_next_scheduled( 'wp_cache_gc' ) ) {
+		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( 'GC Watcher: scheduled new gc cron.', 5 );
+		schedule_wp_gc();
+	}
 }
 
 ?>
