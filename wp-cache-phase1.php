@@ -31,8 +31,6 @@ if ( isset( $_GET[ 'donotcachepage' ] ) && isset( $cache_page_secret ) && $_GET[
 	$cache_enabled = false;
 	define( 'DONOTCACHEPAGE', 1 );
 }
-if ( isset( $wp_cache_make_known_anon ) && $wp_cache_make_known_anon )
-	wp_supercache_cache_for_admins();
 
 $plugins = glob( $wp_cache_plugins_dir . '/*.php' );
 if( is_array( $plugins ) ) {
@@ -41,6 +39,9 @@ if( is_array( $plugins ) ) {
 		require_once( $plugin );
 	}
 }
+
+if ( isset( $wp_cache_make_known_anon ) && $wp_cache_make_known_anon )
+	wp_supercache_cache_for_admins();
 
 do_cacheaction( 'cache_init' );
 
@@ -118,6 +119,7 @@ function wp_super_cache_init() {
 function wp_cache_serve_cache_file() {
 	global $key, $blogcacheid, $wp_cache_request_uri, $file_prefix, $blog_cache_dir, $meta_file, $cache_file, $cache_filename, $wp_super_cache_debug, $meta_pathname, $wp_cache_gzip_encoding, $meta;
 	global $wp_cache_object_cache, $cache_compression, $wp_cache_slash_check, $wp_supercache_304, $wp_cache_home_path, $wp_cache_no_cache_for_get;
+	global $wp_cache_disable_utf8;
 
 	extract( wp_super_cache_init() );
 
@@ -127,13 +129,13 @@ function wp_cache_serve_cache_file() {
 	}
 
 	if ( $wp_cache_no_cache_for_get && false == empty( $_GET ) ) {
-		if ( isset( $wp_super_cache_debug ) && $wp_super_cache_debug ) wp_cache_debug( "Non empty GET request. Caching disabled on settings page.", 1 );
+		if ( isset( $wp_super_cache_debug ) && $wp_super_cache_debug ) wp_cache_debug( "Non empty GET request. Caching disabled on settings page. " . print_r( $_GET, 1 ), 1 );
 		return false;
 	}
 
 	if ( $wp_cache_object_cache && wp_cache_get_cookies_values() == '' ) { 
 		if ( !empty( $_GET ) ) {
-			if ( isset( $wp_super_cache_debug ) && $wp_super_cache_debug ) wp_cache_debug( "Non empty GET request. Not serving request from object cache", 1 );
+			if ( isset( $wp_super_cache_debug ) && $wp_super_cache_debug ) wp_cache_debug( "Non empty GET request. Not serving request from object cache. " . print_r( $_GET, 1 ), 1 );
 			return false;
 		}
 
@@ -182,7 +184,8 @@ function wp_cache_serve_cache_file() {
 			) && 
 			( wp_cache_get_cookies_values() == '' && empty( $_GET ) && $serving_supercache ) )
 		{
-			header( "Content-type: text/html; charset=UTF-8" ); // UTF-8 hard coded is bad but we don't know what it is this early in the process
+			if ( isset( $wp_cache_disable_utf8 ) == false || $wp_cache_disable_utf8 == 0 )
+				header( "Content-type: text/html; charset=UTF-8" ); 
 			header( "Vary: Accept-Encoding, Cookie" );
 			header( "Cache-Control: max-age=3, must-revalidate" );
 			header( "WP-Super-Cache: Served supercache file from PHP" );
@@ -334,9 +337,15 @@ function wp_cache_late_loader() {
 
 function wp_cache_get_cookies_values() {
 	$string = '';
+	$regex = "/^wp-postpass|^comment_author_";
+	if ( defined( 'LOGGED_IN_COOKIE' ) )
+		$regex .= "|^" . preg_quote( constant( 'LOGGED_IN_COOKIE' ) );
+	else
+		$regex .= "|^wordpress_logged_in_";
+	$regex .= "/";
 	while ($key = key($_COOKIE)) {
-		if ( preg_match( "/^wp-postpass|^wordpress_logged_in|^comment_author_/", $key ) ) {
-			if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "Cookie detected: $key", 5 );
+		if ( preg_match( $regex, $key ) ) {
+			if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "wp_cache_get_cookies_values: $regex Cookie detected: $key", 5 );
 			$string .= $_COOKIE[ $key ] . ",";
 		}
 		next($_COOKIE);
@@ -392,13 +401,17 @@ function wp_cache_check_mobile( $cache_key ) {
 	if ( !isset( $wp_cache_mobile_enabled ) || false == $wp_cache_mobile_enabled )
 		return $cache_key;
 
+	if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "wp_cache_check_mobile: $cache_key" );
+
 	// allow plugins to short circuit mobile check. Cookie, extra UA checks?
 	switch( do_cacheaction( 'wp_cache_check_mobile', $cache_key ) ) {
 	case "normal":
+		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "wp_cache_check_mobile: desktop user agent detected by wp_cache_check_mobile action" );
 		return $cache_key;
 		break;
 	case "mobile":
-		return $cache_key . "_mobile";
+		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "wp_cache_check_mobile: mobile user agent detected by wp_cache_check_mobile action" );
+		return $cache_key . "-mobile";
 		break;
 	}
 
@@ -406,8 +419,10 @@ function wp_cache_check_mobile( $cache_key ) {
 		return $cache_key;
 	}
 
-	if ( do_cacheaction( 'disable_mobile_check', false ) )
+	if ( do_cacheaction( 'disable_mobile_check', false ) ) {
+		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "wp_cache_check_mobile: disable_mobile_check disabled mobile check" );
 		return $cache_key;
+	}
 
 	$browsers = explode( ',', $wp_cache_mobile_browsers );
 	$user_agent = strtolower( $_SERVER['HTTP_USER_AGENT'] );
@@ -485,7 +500,7 @@ function get_supercache_dir( $blog_id = 0 ) {
 	return apply_filters( 'wp_super_cache_supercachedir', $cache_path . 'supercache/' . trailingslashit( strtolower( preg_replace( '/:.*$/', '', str_replace( 'http://', '', str_replace( 'https://', '', $home ) ) ) ) ) );
 }
 function get_current_url_supercache_dir( $post_id = 0 ) {
-	global $cached_direct_pages, $cache_path, $wp_cache_request_uri, $WPSC_HTTP_HOST;
+	global $cached_direct_pages, $cache_path, $wp_cache_request_uri, $WPSC_HTTP_HOST, $wp_cache_home_path;
 	static $saved_supercache_dir = array();
 
 	if ( isset( $saved_supercache_dir[ $post_id ] ) ) {
@@ -523,6 +538,8 @@ function get_current_url_supercache_dir( $post_id = 0 ) {
 			}
 		} else {
 			$uri = str_replace( $site_url, '', $permalink );
+			if ( strpos( $uri, $wp_cache_home_path ) !== 0 )
+				$uri = rtrim( $wp_cache_home_path, '/' ) . $uri;
 		}
 	} else {
 		$uri = strtolower( $wp_cache_request_uri );
@@ -627,12 +644,14 @@ function wp_supercache_cache_for_admins() {
 		return true;
 
 	$cookie_keys = array( 'wordpress_logged_in', 'comment_author_' );
+	if ( defined( 'LOGGED_IN_COOKIE' ) )
+		$cookie_keys[] = constant( 'LOGGED_IN_COOKIE' );
 	reset( $_COOKIE );
 	foreach( $_COOKIE as $cookie => $val ) {
 		reset( $cookie_keys );
 		foreach( $cookie_keys as $key ) {
 			if ( strpos( $cookie, $key ) !== FALSE ) {
-				if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( 'Removing auth from $_COOKIE to allow caching for logged user (' . $cookie . ')', 5 );
+				if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( 'Removing auth from $_COOKIE to allow caching for logged in user (' . $cookie . ')', 5 );
 				unset( $_COOKIE[ $cookie ] );
 			}
 		}

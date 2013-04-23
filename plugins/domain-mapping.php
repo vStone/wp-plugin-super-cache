@@ -57,9 +57,11 @@ function wp_supercache_domain_mapping_admin() {
 	global $cache_domain_mapping, $wp_cache_config_file, $valid_nonce;
 	
 	$cache_domain_mapping = $cache_domain_mapping == '' ? '0' : $cache_domain_mapping;
-	$changed = false;
+
 	if(isset($_POST['cache_domain_mapping']) && $valid_nonce) {
-		if ( $cache_domain_mapping != (int)$_POST['cache_domain_mapping'] ) {
+		if ( $cache_domain_mapping == (int)$_POST['cache_domain_mapping'] ) {
+			$changed = false;
+		} else {
 			$changed = true;
 		}
 		$cache_domain_mapping = (int)$_POST['cache_domain_mapping'];
@@ -69,7 +71,7 @@ function wp_supercache_domain_mapping_admin() {
 	?>
 		<fieldset id="<?php echo $id; ?>" class="options"> 
 		<h4><?php _e( 'Domain Mapping', 'wp-super-cache' ); ?></h4>
-		<form name="wp_manager" action="<?php echo $_SERVER[ "REQUEST_URI" ]; ?>" method="post">
+		<form name="wp_manager" action="" method="post">
 		<label><input type="radio" name="cache_domain_mapping" value="1" <?php if( $cache_domain_mapping ) { echo 'checked="checked" '; } ?>/> <?php _e( 'Enabled', 'wp-super-cache' ); ?></label>
 		<label><input type="radio" name="cache_domain_mapping" value="0" <?php if( !$cache_domain_mapping ) { echo 'checked="checked" '; } ?>/> <?php _e( 'Disabled', 'wp-super-cache' ); ?></label>
 		<p><?php _e( '', 'wp-super-cache' ); ?></p><?php

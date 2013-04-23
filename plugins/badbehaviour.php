@@ -39,7 +39,6 @@ function wp_supercache_badbehaviour_admin() {
 		$cache_badbehaviour = 0;
 
 	$err = false;
-	$changed = false;
 
 	if ( isset( $_POST['cache_badbehaviour'] ) && $valid_nonce ) {
 		$bbfile = get_bb_file_loc();
@@ -47,10 +46,11 @@ function wp_supercache_badbehaviour_admin() {
 			$_POST[ 'cache_badbehaviour' ] = 0;
 			$err = __( 'Bad Behaviour not found. Please check your install.', 'wp-super-cache' );
 		}
-		// This test is pretty much useless if you are going to set changed to true anyhow
-		//if ( $cache_badbehaviour != (int)$_POST['cache_badbehaviour'] ) {
-		//	$changed = true;
-		//}
+		if ( $cache_badbehaviour == (int)$_POST['cache_badbehaviour'] ) {
+			$changed = false;
+		} else {
+			$changed = true;
+		}
 		$cache_badbehaviour = (int)$_POST['cache_badbehaviour'];
 		wp_cache_replace_line('^ *\$cache_compression', "\$cache_compression = 0;", $wp_cache_config_file);
 		wp_cache_replace_line('^ *\$cache_badbehaviour', "\$cache_badbehaviour = $cache_badbehaviour;", $wp_cache_config_file);
@@ -61,7 +61,7 @@ function wp_supercache_badbehaviour_admin() {
 	?>
 		<fieldset id="<?php echo $id; ?>" class="options"> 
 		<h4><?php _e( 'Bad Behavior', 'wp-super-cache' ); ?></h4>
-		<form name="wp_manager" action="<?php echo $_SERVER[ "REQUEST_URI" ]; ?>" method="post">
+		<form name="wp_manager" action="" method="post">
 		<label><input type="radio" name="cache_badbehaviour" value="1" <?php if( $cache_badbehaviour ) { echo 'checked="checked" '; } ?>/> <?php _e( 'Enabled', 'wp-super-cache' ); ?></label>
 		<label><input type="radio" name="cache_badbehaviour" value="0" <?php if( !$cache_badbehaviour ) { echo 'checked="checked" '; } ?>/> <?php _e( 'Disabled', 'wp-super-cache' ); ?></label>
 		<p><?php _e( '', 'wp-super-cache' ); ?></p><?php

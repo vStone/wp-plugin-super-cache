@@ -18,10 +18,10 @@ function wp_super_cache_wptouch_admin() {
 	?>
 		<fieldset id="<?php echo $id; ?>" class="options"> 
 		<h4><?php _e( 'WPTouch', 'wp-super-cache' ); ?></h4>
-		<form name="wp_manager" action="<?php echo $_SERVER[ "REQUEST_URI" ]; ?>" method="post">
+		<form name="wp_manager" action="" method="post">
 		<label><input type="radio" name="cache_wptouch" value="1" <?php if( $cache_wptouch ) { echo 'checked="checked" '; } ?>/> <?php _e( 'Enabled', 'wp-super-cache' ); ?></label>
 		<label><input type="radio" name="cache_wptouch" value="0" <?php if( !$cache_wptouch ) { echo 'checked="checked" '; } ?>/> <?php _e( 'Disabled', 'wp-super-cache' ); ?></label>
-		<p><?php _e( '', 'wp-super-cache' ); ?></p><?php
+		<?php
 		echo '<p>' . __( 'Provides support for <a href="http://wordpress.org/extend/plugins/wptouch/">WPTouch</a> mobile theme and plugin.', 'wp-super-cache' ) . '</p>';
 		if ( isset( $changed ) && $changed ) {
 			if ( $cache_wptouch )
@@ -63,7 +63,8 @@ function wp_super_cache_maybe_disable_wptouch( $t ) {
 	if ( $cache_wptouch != 1 )
 		return false;
 
-	if ( isset( $_COOKIE[ 'wptouch_switch_toggle' ] ) && $_COOKIE['wptouch_switch_toggle'] == 'normal' )
+	if ( ( isset( $_COOKIE[ 'wptouch_switch_toggle' ] ) && $_COOKIE[ 'wptouch_switch_toggle' ] == 'normal' ) ||
+		( isset( $_COOKIE[ 'wptouch-pro-view' ] ) && $_COOKIE[ 'wptouch-pro-view' ] == 'desktop' ) )
 		return true;
 
 	$ua = explode( ",", $wptouch_exclude_ua );
@@ -102,6 +103,13 @@ function wp_super_cache_wptouch_cookie_check( $cache_key ) {
 		return $cache_key;
 	if ( $_COOKIE[ 'wptouch_switch_toggle' ] == 'normal' || $_COOKIE[ 'wptouch_switch_toggle' ] == 'mobile' )
 		return $_COOKIE[ 'wptouch_switch_toggle' ];
+
+	if ( isset( $_COOKIE[ 'wptouch-pro-view' ] ) ) {
+		if ( $_COOKIE[ 'wptouch-pro-view' ] == 'desktop' )
+			return 'normal';
+		else
+			return $_COOKIE[ 'wptouch-pro-view' ];
+	}
 
 	return $cache_key;
 }

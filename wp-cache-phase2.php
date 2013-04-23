@@ -40,12 +40,13 @@ function wp_cache_phase2() {
 		add_action('wp_cache_gc','wp_cache_gc_cron');
 		add_action( 'clean_post_cache', 'wp_cache_post_edit' );
 		add_filter( 'supercache_filename_str', 'wp_cache_check_mobile' );
+		add_action( 'wp_cache_gc_watcher', 'wp_cache_gc_watcher' );
 
 		do_cacheaction( 'add_cacheaction' );
 	}
 
 	if ( $wp_cache_no_cache_for_get && false == empty( $_GET ) && false == defined( 'DOING_CRON' ) ) {
-		if ( isset( $wp_super_cache_debug ) && $wp_super_cache_debug ) wp_cache_debug( "Non empty GET request. Caching disabled on settings page.", 1 );
+		if ( isset( $wp_super_cache_debug ) && $wp_super_cache_debug ) wp_cache_debug( "Non empty GET request. Caching disabled on settings page. " . print_r( $_GET, 1 ), 1 );
 		return false;
 	}
 
@@ -70,7 +71,7 @@ function wp_cache_phase2() {
 	}
 
 	if ( !empty( $_GET ) ) {
-		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( 'Supercache caching disabled. Only using wp-cache. Non empty GET request.', 5 );
+		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( 'Supercache caching disabled. Only using wp-cache. Non empty GET request. ' . print_r( $_GET, 1 ), 5 );
 		$super_cache_enabled = false;
 	}
 
@@ -352,7 +353,7 @@ function wp_cache_get_ob(&$buffer) {
 	global $wp_cache_404, $gzsize, $supercacheonly;
 	global $blog_cache_dir, $wp_cache_request_uri, $wp_supercache_cache_list;
 	global $wp_cache_not_logged_in, $wp_cache_object_cache, $cache_max_time;
-	global $wp_cache_is_home, $wp_cache_front_page_checks;
+	global $wp_cache_is_home, $wp_cache_front_page_checks, $wp_cache_mfunc_enabled;
 
 	$new_cache = true;
 	$wp_cache_meta = '';
@@ -498,20 +499,29 @@ function wp_cache_get_ob(&$buffer) {
 	$added_cache = 0;
 	$oc_key = get_oc_key();
 	if ( preg_match( '/<!--mclude|<!--mfunc|<!--dynamic-cached-content-->/', $buffer ) ) { //Dynamic content
-		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "Dynamic content found in buffer.", 4 );
-		$store = preg_replace('|<!--mclude (.*?)-->(.*?)<!--/mclude-->|is',
+		if ( !isset( $wp_cache_mfunc_enabled ) || $wp_cache_mfunc_enabled == 0 ) {
+			if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "Dynamic content found in buffer but dynamic caching disabled on settings page.", 4 );
+			wp_cache_add_to_buffer( $buffer, 'Super Cache dynamic page detected but dynamic caching disabled on the settings page.' );
+			$buffer = preg_replace( '#(<!--\s*(mclude|mfunc|dynamic-cached-content).*<!-+\s*/\s*(mfunc|mclude|dynamic-cached-content)\s*-+>)#ism','', $buffer );
+			$store = $buffer;
+			/* Clean function calls in tag */
+			$store = apply_filters( 'wpsupercache_buffer', $store );
+		} else {
+			if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "Dynamic content found in buffer.", 4 );
+			$store = preg_replace('|<!--mclude (.*?)-->(.*?)<!--/mclude-->|is',
 				"<!--mclude-->\n<?php include_once('" . ABSPATH . "$1'); ?>\n<!--/mclude-->", $buffer);
-		$store = preg_replace('|<!--mfunc (.*?)-->(.*?)<!--/mfunc-->|is',
+			$store = preg_replace('|<!--mfunc (.*?)-->(.*?)<!--/mfunc-->|is',
 				"<!--mfunc-->\n<?php $1 ;?>\n<!--/mfunc-->", $store);
-		$store = preg_replace('|<!--dynamic-cached-content-->(.*?)<!--(.*?)--><!--/dynamic-cached-content-->|is',
+			$store = preg_replace('|<!--dynamic-cached-content-->(.*?)<!--(.*?)--><!--/dynamic-cached-content-->|is',
 				"<!--dynamic-cached-content-->\n<?php$2?>\n<!--/dynamic-cached-content-->", $store);
-		$wp_cache_meta[ 'dynamic' ] = true;
-		/* Clean function calls in tag */
-		$buffer = preg_replace('|<!--mclude (.*?)-->|is', '<!--mclude-->', $buffer);
-		$buffer = preg_replace('|<!--mfunc (.*?)-->|is', '<!--mfunc-->', $buffer);
-		$buffer = preg_replace('|<!--dynamic-cached-content-->(.*?)<!--(.*?)--><!--/dynamic-cached-content-->|is',
+			$wp_cache_meta[ 'dynamic' ] = true;
+			/* Clean function calls in tag */
+			$buffer = preg_replace('|<!--mclude (.*?)-->|is', '<!--mclude-->', $buffer);
+			$buffer = preg_replace('|<!--mfunc (.*?)-->|is', '<!--mfunc-->', $buffer);
+			$buffer = preg_replace('|<!--dynamic-cached-content-->(.*?)<!--(.*?)--><!--/dynamic-cached-content-->|is',
 				"<!--dynamic-cached-content-->$1<!--/dynamic-cached-content-->", $buffer);
-		$store = apply_filters( 'wpsupercache_buffer', $store );
+			$store = apply_filters( 'wpsupercache_buffer', $store );
+		}
 		// Append WP Super Cache or Live page comment tag
 		wp_cache_append_tag($buffer);
 		wp_cache_append_tag($store);
@@ -601,11 +611,11 @@ function wp_cache_get_ob(&$buffer) {
 				if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "Warning! The file $tmp_wpcache_filename was empty. Did not rename to {$blog_cache_dir}{$cache_filename}", 5 );
 				@unlink( $tmp_wpcache_filename );
 			} else {
-				if ( !rename( $tmp_wpcache_filename, $blog_cache_dir . $cache_filename ) ) {
+				if ( !@rename( $tmp_wpcache_filename, $blog_cache_dir . $cache_filename ) ) {
 					if ( false == is_dir( $blog_cache_dir ) )
 						@wp_mkdir_p( $blog_cache_dir );
-					unlink( $blog_cache_dir . $cache_filename );
-					rename( $tmp_wpcache_filename, $blog_cache_dir . $cache_filename );
+					@unlink( $blog_cache_dir . $cache_filename );
+					@rename( $tmp_wpcache_filename, $blog_cache_dir . $cache_filename );
 				}
 				if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "Renamed temp wp-cache file to {$blog_cache_dir}$cache_filename", 5 );
 				$added_cache = 1;
@@ -667,7 +677,7 @@ function wp_cache_get_ob(&$buffer) {
 		$last_urls = (array)get_option( 'supercache_last_cached' );
 		if ( count( $last_urls ) >= 10 )
 			$last_urls = array_slice( $last_urls, 1, 9 );
-		$last_urls[] = array( 'url' => $_SERVER[ 'REQUEST_URI' ], 'date' => date( 'Y-m-d H:i:s' ) );
+		$last_urls[] = array( 'url' => preg_replace( '/[ <>\'\"\r\n\t\(\)]/', '', $_SERVER[ 'REQUEST_URI' ] ), 'date' => date( 'Y-m-d H:i:s' ) );
 		update_option( 'supercache_last_cached', $last_urls );
 	}
 	wp_cache_writers_exit();
@@ -1010,16 +1020,23 @@ function wp_cache_post_edit($post_id) {
 	global $wp_cache_clear_on_post_edit, $cache_path, $blog_cache_dir;
 	static $last_post_edited = -1;
 
-	if ( $post_id == $last_post_edited ) return $post_id;
-	$last_post_edited = $post_id;
+	if ( $post_id == $last_post_edited ) {
+		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "wp_cache_post_edit: Already processed post $post_id.", 4 );
+		return $post_id;
+	}
 
 	$post = get_post( $post_id );
-	if ( $post->post_status != 'publish' ) {
+	// Some users are inexplicibly seeing this error on scheduled posts. 
+	// define this constant to disable the post status check.
+	if ( false == defined( 'WPSCFORCEUPDATE' ) && $post->post_status != 'publish' ) {
 		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "wp_cache_post_edit: draft post, not deleting any cache files.", 4 );
 		return $post_id;
 	}
+
+	// we want to process the post again just in case it becomes published before the second time this function is called.
+	$last_post_edited = $post_id;
 	if( $wp_cache_clear_on_post_edit ) {
-		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "Clearing cache $blog_cache_dir and {$cache_path}supercache/ on post edit per config.", 2 );
+		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "wp_cache_post_edit: Clearing cache $blog_cache_dir and {$cache_path}supercache/ on post edit per config.", 2 );
 		if ( $wp_cache_object_cache ) {
 			reset_oc_version();
 		} else {
@@ -1027,7 +1044,7 @@ function wp_cache_post_edit($post_id) {
 			prune_super_cache( get_supercache_dir(), true );
 		}
 	} else {
-		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "Clearing cache for post $post_id on post edit.", 2 );
+		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "wp_cache_post_edit: Clearing cache for post $post_id on post edit.", 2 );
 		wp_cache_post_change( $post_id );
 	}
 }
@@ -1066,13 +1083,18 @@ function wp_cache_post_change( $post_id ) {
 	global $file_prefix, $cache_path, $blog_id, $super_cache_enabled, $blog_cache_dir, $blogcacheid, $wp_cache_refresh_single_only;
 	static $last_processed = -1;
 
-	if ($post_id == $last_processed) return $post_id;
-	$last_processed = $post_id;
+	if ( $post_id == $last_processed ) {
+		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "wp_cache_post_change: Already processed post $post_id.", 4 );
+		return $post_id;
+	}
 	$post = get_post( $post_id );
-	if( $post->post_status != 'publish' ) {
+	// Some users are inexplicibly seeing this error on scheduled posts. 
+	// define this constant to disable the post status check.
+	if ( false == defined( 'WPSCFORCEUPDATE' ) && $post->post_status != 'publish' ) {
 		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "wp_cache_post_change: draft post, not deleting any cache files.", 4 );
 		return $post_id;
 	}
+	$last_processed = $post_id;
 
 	if( !wp_cache_writers_entry() )
 		return $post_id;
@@ -1181,6 +1203,27 @@ function wp_cache_post_id() {
 	return 0;
 }
 
+function maybe_stop_gc( $flag ) {
+
+	if ( @file_exists( $flag ) ) {
+		if ( time() - filemtime( $flag ) > 3600 ) {
+			@unlink( $flag );
+			if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "maybe_stop_gc: GC flag found but deleted because it's older than 3600 seconds.", 5 );
+			return false;
+		} else {
+			if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( 'maybe_stop_gc: GC flag found. GC cancelled.', 5 );
+			return true;
+		}
+	} else {
+		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( 'maybe_stop_gc: GC flag not found. GC will go ahead..', 5 );
+		return false;
+	}
+}
+function get_gc_flag() {
+	global $cache_path;
+	return $cache_path . strtolower( preg_replace( '!/:.*$!', '', str_replace( 'http://', '', str_replace( 'https://', '', get_option( 'home' ) ) ) ) ) . "_wp_cache_gc.txt";
+}
+
 function wp_cache_gc_cron() {
 	global $file_prefix, $cache_max_time, $cache_gc_email_me, $cache_time_interval;
 
@@ -1189,7 +1232,17 @@ function wp_cache_gc_cron() {
 		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( 'Cache garbage collection disabled because cache expiry time is zero.', 5 );
 		return false;
 	}
+
+	$gc_flag = get_gc_flag();
+	if ( maybe_stop_gc( $gc_flag ) ) {
+		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( 'GC flag found. GC cancelled.', 5 );
+		return false;
+	}
+
 	update_option( 'wpsupercache_gc_time', time() ); 
+	if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( "wp_cache_gc_cron: Set GC Flag. ($gc_flag)", 5 );
+	$fp = @fopen( $gc_flag, 'w' );
+	@fclose( $fp );
 
 	if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( 'Cache garbage collection.', 5 );
 
@@ -1216,21 +1269,26 @@ function wp_cache_gc_cron() {
 
 		wp_mail( get_option( 'admin_email' ), sprintf( __( '[%1$s] WP Super Cache GC Report', 'wp-super-cache' ), site_url() ), $msg );
 	}
+	@unlink( $gc_flag );
+	if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( 'GC completed. GC flag deleted.', 5 );
 	schedule_wp_gc( 1 );
 }
 
 function schedule_wp_gc( $forced = 0 ) {
 	global $cache_schedule_type, $cache_max_time, $cache_time_interval, $cache_scheduled_time, $cache_schedule_interval;
 
+	if ( false == isset( $cache_time_interval ) )
+		$cache_time_interval = 3600;
+
 	if ( false == isset( $cache_schedule_type ) ) {
 		$cache_schedule_type = 'interval';
 		$cache_schedule_interval = $cache_max_time;
 	}
 	if ( $cache_schedule_type == 'interval' ) {
-		if ( $cache_max_time == 0 )
-			return false;
 		if ( !isset( $cache_max_time ) )
 			$cache_max_time = 600;
+		if ( $cache_max_time == 0 )
+			return false;
 		$last_gc = get_option( "wpsupercache_gc_time" );
 
 		if ( !$last_gc ) {
@@ -1254,6 +1312,13 @@ function schedule_wp_gc( $forced = 0 ) {
 		wp_schedule_event( strtotime( $cache_scheduled_time ), $cache_schedule_interval, 'wp_cache_gc' );
 	}
 	return true;
+}
+
+function wp_cache_gc_watcher() {
+	if ( false == wp_next_scheduled( 'wp_cache_gc' ) ) {
+		if ( isset( $GLOBALS[ 'wp_super_cache_debug' ] ) && $GLOBALS[ 'wp_super_cache_debug' ] ) wp_cache_debug( 'GC Watcher: scheduled new gc cron.', 5 );
+		schedule_wp_gc();
+	}
 }
 
 ?>
